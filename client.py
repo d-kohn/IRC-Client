@@ -7,7 +7,9 @@ import PySimpleGUI as sg
 import time
 import asyncio
 import websockets
-from json import dumps
+import json
+
+from json_request import JSON_Request
 class WebSocketClient():
 
     def __init__(self):
@@ -77,14 +79,14 @@ def make_window(theme=None):
     ],
 
     left_layout = [
+        # [
+        #     name('Server'), 
+        #     sg.Input(s=30, key='-SERVER-'), 
+        #     sg.Button('Connect'), 
+        #     sg.Text(size=(1,1), key="-CONNECTED-", visible=False),
+        # ],
         [
-            name('Server'), 
-            sg.Input(s=30, key='-SERVER-'), 
-            sg.Button('Connect'), 
-            sg.Text(size=(1,1), key="-CONNECTED-", visible=False),
-        ],
-        [
-            name('Messages'),
+            sg.Text('MESSAGES', font='Courier 10'),
         ],
         [
             sg.Text(size=(90,1), key=f'-OUTPUT0-')
@@ -140,11 +142,14 @@ def make_window(theme=None):
         [
             name('Room List'), 
             sg.Button('Update'),
+            sg.Text('  User List(selected room)', font='Courier 10'),
         ],
         [
             sg.Listbox(values=[], enable_events=True, size=(30, 12), key="-ROOM LIST-"),
+            sg.Listbox(values=[], enable_events=True, size=(30, 12), key="-USER LIST-"),
         ],
         [
+            sg.Button('Join'),
             sg.Button('Leave'),
             sg.Button('Destroy', ),
             sg.Exit()
@@ -190,30 +195,72 @@ def login_window():
                 break
     return username, server
 
-async def main_window(client): 
+def update_message_box(window, message_data, message):
+    scroll_messages(window, message_data)    
+    current_time = time.strftime("%I:%M:%S")
+    message_data[MSG_BOX_SIZE-1] = f"{current_time} <{username}> {message}"
+    window[f'-OUTPUT{MSG_BOX_SIZE-1}-'].update(message_data[MSG_BOX_SIZE-1])     
+ 
+async def main_window(client, jr): 
     message_data = [""for i in range(MSG_BOX_SIZE)]
+    uuid = '1234-my-uuid-5678'
+    rooms = {}
+    rooms[''] = []
+    rooms['myroom'] = ['joe', 'larry']
+    rooms['anotherroom'] = ['joe', 'sue', 'tom']
+    rooms['destroyme'] = []
+    room_list = ['myroom', 'anotherroom', 'destroyme']
+
 
     window = make_window()
+    current_room = ''
+    room_list_box = window['-ROOM LIST-']
+    user_list_box = window['-USER LIST-']
+    room_list_box.update(room_list)
+    user_list_box.update(rooms[current_room])
 
     while True:
         await asyncio.sleep(0.05)
+#        room_list_box.update(room_list)
+#        user_list_box.update(rooms[current_room])
         event, values = window.read(timeout=0)
         if event == sg.WIN_CLOSED or event == 'Exit':
             break
 
         if event == 'Send':
-            scroll_messages(window, message_data)    
-            current_time = time.strftime("%I:%M:%S")
-            message_data[MSG_BOX_SIZE-1] = f"{current_time} <{username}> {values['-IN-']}"
-            window[f'-OUTPUT{MSG_BOX_SIZE-1}-'].update(message_data[MSG_BOX_SIZE-1])     
-            await client.sendMessage(values['-IN-'])
+            text = values['-IN-']     
+            update_message_box(window, message_data, text)
+            message = jr.build_json_request(['SEND', uuid, room_list[0], values['-IN-']])    
+            await client.sendMessage(json.dumps(message))
             window['-IN-'].update("")
 
+        if event == '-ROOM LIST-':
+            current_room = values['-ROOM LIST-'][0]
+            room_list_box.update(room_list)    
+            user_list_box.update(rooms[current_room])
+
+        if event == 'Update':
+            message = jr.build_json_request(['UPDATE', uuid])
+            await client.sendMessage(json.dumps(message))
+
+        if event == 'Create':
+            message = jr.build_json_request(['CREATE_ROOM', values['-CREATE-']])    
+            await client.sendMessage(json.dumps(message))
+ 
+        if event == 'Destroy':
+            message = jr.build_json_request(['DESTROY_ROOM', current_room])    
+            await client.sendMessage(json.dumps(message))
+
+        if event == 'Join':
+            message = jr.build_json_request(['JOIN_ROOM', uuid, current_room])    
+            await client.sendMessage(json.dumps(message))
+
+        if event == 'Leave':
+            message = jr.build_json_request(['LEAVE_ROOM', uuid, current_room])    
+            await client.sendMessage(json.dumps(message))
+
         while (len(rcvd_pipe) > 0):           
-            scroll_messages(window, message_data)    
-            current_time = time.strftime("%I:%M:%S")
-            message_data[MSG_BOX_SIZE-1] = f"{current_time} <{username}> {rcvd_pipe.pop()}"
-            window[f'-OUTPUT{MSG_BOX_SIZE-1}-'].update(message_data[MSG_BOX_SIZE-1])
+            update_message_box(window, message_data, rcvd_pipe.pop())
 
         # if event == 'Connect':
         #     server = values['-SERVER-']
@@ -242,6 +289,7 @@ if __name__ == '__main__':
     server = ""
     # Creating client object
     client = WebSocketClient()
+    jr = JSON_Request()
     loop = asyncio.get_event_loop()
 
     while (connected == False):
@@ -250,16 +298,14 @@ if __name__ == '__main__':
         connection = loop.run_until_complete(client.connect(server))
         if (connection != NoneType):
             connected = True
-            login_info = {
-                 'request' : 'LOGIN',
-                'username' : username
-            }
-
+            login_info = jr.build_json_request(['LOGIN', username])
+            print(login_info)
+            loop.run_until_complete(client.sendMessage(json.dumps(login_info)))
 
     # Start listener and heartbeat 
     tasks = [
-        asyncio.ensure_future(client.keepAlive(connection)),
-        asyncio.ensure_future(main_window(client)),
+#        asyncio.ensure_future(client.keepAlive(connection)),
+        asyncio.ensure_future(main_window(client, jr)),
         asyncio.ensure_future(client.receiveMessage(connection)),
     ]
 
