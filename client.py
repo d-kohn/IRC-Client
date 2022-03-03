@@ -71,70 +71,31 @@ def make_window(theme=None):
             dots = NAME_SIZE-len(name)-2
             return sg.Text(name + ' ' + '•'*dots, size=(NAME_SIZE,1), justification='r',pad=(0,0), font='Courier 10')
 
-    message_box_layout = [
-        [
-            sg.Text(size=(90,1), key=f'-OUTPUT{row}-'),
-        ] 
-        for row in range(10) 
-    ],
+    # message_box_layout = [
+    #     [
+    #         sg.Text(size=(90,1), key=f'-OUTPUT{row}-'),
+    #     ] 
+    #     for row in range(10) 
+    # ],
 
     left_layout = [
-        # [
-        #     name('Server'), 
-        #     sg.Input(s=30, key='-SERVER-'), 
-        #     sg.Button('Connect'), 
-        #     sg.Text(size=(1,1), key="-CONNECTED-", visible=False),
-        # ],
-        [
-            sg.Text('MESSAGES', font='Courier 10'),
-        ],
-        [
-            sg.Text(size=(90,1), key=f'-OUTPUT0-')
-        ], 
-        [
-            sg.Text(size=(90,1), key=f'-OUTPUT1-')
-        ], 
-        [
-            sg.Text(size=(90,1), key=f'-OUTPUT2-')
-        ], 
-        [
-            sg.Text(size=(90,1), key=f'-OUTPUT3-')
-        ], 
-        [
-            sg.Text(size=(90,1), key=f'-OUTPUT4-')
-        ], 
-        [
-            sg.Text(size=(90,1), key=f'-OUTPUT5-')
-        ], 
-        [
-            sg.Text(size=(90,1), key=f'-OUTPUT6-')
-        ], 
-        [
-            sg.Text(size=(90,1), key=f'-OUTPUT7-')
-        ], 
-        [
-            sg.Text(size=(90,1), key=f'-OUTPUT8-')
-        ], 
-        [
-            sg.Text(size=(90,1), key=f'-OUTPUT9-')
-        ], 
-        [
-            sg.Input(s=90, key='-IN-', do_not_clear=False),
-        ],
-        # [
-        #     sg.Text(size=(1,1)),
-        # ],
-        [
-            sg.Button('Send',bind_return_key=True, visible=True), 
-        ],
+        [sg.Text('MESSAGES', font='Courier 10')],
+        [sg.Text(size=(90,1), key=f'-OUTPUT0-')], 
+        [sg.Text(size=(90,1), key=f'-OUTPUT1-')], 
+        [sg.Text(size=(90,1), key=f'-OUTPUT2-')], 
+        [sg.Text(size=(90,1), key=f'-OUTPUT3-')], 
+        [sg.Text(size=(90,1), key=f'-OUTPUT4-')], 
+        [sg.Text(size=(90,1), key=f'-OUTPUT5-')], 
+        [sg.Text(size=(90,1), key=f'-OUTPUT6-')], 
+        [sg.Text(size=(90,1), key=f'-OUTPUT7-')], 
+        [sg.Text(size=(90,1), key=f'-OUTPUT8-')], 
+        [sg.Text(size=(90,1), key=f'-OUTPUT9-')], 
+        [sg.Input(s=90, key='-IN-', do_not_clear=False)],
+        [sg.Button('Send',bind_return_key=True, visible=True)],
     ]
     right_layout = [
-        [
-           sg.Text('ROOMS', font='Courier 10'),
-        ],
-        [
-           sg.Text('Create new room:', font='Courier 10'),
-        ],
+        [sg.Text('ROOMS', font='Courier 10')],
+        [sg.Text('Create new room:', font='Courier 10')],
         [ 
             sg.Input(s=25, key='-CREATE-', do_not_clear=False), 
             sg.Button('Create'),
@@ -204,11 +165,11 @@ def update_message_box(window, message_data, message):
 async def main_window(client, jr): 
     message_data = [""for i in range(MSG_BOX_SIZE)]
     uuid = '1234-my-uuid-5678'
-    rooms = {}
-    rooms[''] = []
-    rooms['myroom'] = ['joe', 'larry']
-    rooms['anotherroom'] = ['joe', 'sue', 'tom']
-    rooms['destroyme'] = []
+    room_users = {}
+    room_users[''] = []
+    room_users['myroom'] = ['joe', 'larry']
+    room_users['anotherroom'] = ['joe', 'sue', 'tom']
+    room_users['destroyme'] = []
     room_list = ['myroom', 'anotherroom', 'destroyme']
 
 
@@ -217,12 +178,10 @@ async def main_window(client, jr):
     room_list_box = window['-ROOM LIST-']
     user_list_box = window['-USER LIST-']
     room_list_box.update(room_list)
-    user_list_box.update(rooms[current_room])
+    user_list_box.update(room_users[current_room])
 
     while True:
         await asyncio.sleep(0.05)
-#        room_list_box.update(room_list)
-#        user_list_box.update(rooms[current_room])
         event, values = window.read(timeout=0)
         if event == sg.WIN_CLOSED or event == 'Exit':
             break
@@ -237,7 +196,7 @@ async def main_window(client, jr):
         if event == '-ROOM LIST-':
             current_room = values['-ROOM LIST-'][0]
             room_list_box.update(room_list)    
-            user_list_box.update(rooms[current_room])
+            user_list_box.update(room_users[current_room])
 
         if event == 'Update':
             message = jr.build_json_request(['UPDATE', uuid])
@@ -262,14 +221,6 @@ async def main_window(client, jr):
         while (len(rcvd_pipe) > 0):           
             update_message_box(window, message_data, rcvd_pipe.pop())
 
-        # if event == 'Connect':
-        #     server = values['-SERVER-']
-        #     window['-CONNECTED-'].update(f"Attempting to connect...", visible=True)     
-            
-        #     window['-CONNECTED-'].update(f"Connected: {server}", visible=True)
-        #     window['-SERVER-'].update("")
-        #     connected = True     
-        #     window['-CONNECTED-'].update(f"Connection failed", visible=True)     
     window.close()
     exit(1)
 
