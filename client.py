@@ -195,18 +195,18 @@ async def main_window(client, jr):
         event, values = window.read(timeout=0)
 
         if event == sg.WIN_CLOSED or event == 'Exit':
+            message = jr.build_json_request(['LOGOUT'])    
+            await client.sendMessage(message)
             break
 
         if event == '-ROOM LIST-':
              if (room_list != [None]):
                 current_room = values['-ROOM LIST-'][0]
-#                print(current_room)
                 room_list_box.update(room_list)
                 user_list_box.update(room_user_list[current_room])
 
         if event == 'Send':
             text = values['-IN-']
-#            print (current_room)      
             if (current_room != None):
                 message = jr.build_json_request(['SEND', roomName_to_roomId[current_room], text])
                 await client.sendMessage(message)
@@ -215,11 +215,10 @@ async def main_window(client, jr):
                 update_message_box(window, message_box, "Join or create a room to send a message")                
 
         if event == 'Update':
-            if (current_room != None):
-                message = jr.build_json_request(['LIST_ALL_ROOMS', uuid])
-                await client.sendMessage(message)
-            else:
-                update_message_box(window, message_box, "You are not in a room")                
+            message = jr.build_json_request(['LIST_ALL_ROOMS'])
+            await client.sendMessage(message)
+            # else:
+            #     update_message_box(window, message_box, "You are not in a room")                
 
         if event == 'Create':
             room_name = values['-CREATE-']
@@ -239,8 +238,11 @@ async def main_window(client, jr):
 
         if event == 'Join':
             if (current_room != None):
-                message = jr.build_json_request(['JOIN_ROOM', roomName_to_roomId[current_room]])    
-                await client.sendMessage(message)
+                if not (current_room in my_rooms):
+                    message = jr.build_json_request(['JOIN_ROOM', roomName_to_roomId[current_room]])    
+                    await client.sendMessage(message)
+                else:
+                    update_message_box(window, message_box, "You are already in that room")                
             else:
                 update_message_box(window, message_box, "Select a room from the Room List to join")                
 
@@ -256,7 +258,13 @@ async def main_window(client, jr):
             message_data = jr.process_response(incoming_message)          
             server_message_type = server_message_types_list[message_data[SERVER_MESSAGE_TYPE]]
             message_type = message_data[MESSAGE_TYPE]
-            (server_message_type[message_type])(window, message_data)
+            if(message_type == 'ROOM_JOINED'):
+                (server_message_type[message_type])(window, message_data)
+                message = jr.build_json_request(['LIST_ROOM_MEMBERS', message_data[2]])        
+                await client.sendMessage(message)
+                print(message)
+            else:
+                (server_message_type[message_type])(window, message_data)
 #            update_message_box(window, message_data, rcvd_message)
 
     window.close()
@@ -291,8 +299,11 @@ def r_send_room_msg(window, message):
 
 def r_list_of_users(window, message):
     user_list_box = window['-USER LIST-']
-    room_user_list[current_room] = message[2]
-    user_list_box.update(room_user_list[current_room])
+    new_user_list = message[2]
+    if not (len(new_user_list) == 0):
+        old_user_list = room_user_list[current_room] - new_user_list
+        room_user_list[current_room] = old_user_list + new_user_list
+        user_list_box.update(room_user_list[current_room])
 
 def r_room_created(window,  message):
     room_list_box = window['-ROOM LIST-']
@@ -307,33 +318,43 @@ def r_room_created(window,  message):
     print(room_user_list[roomName])
 
 def r_room_joined(window, message):
-    print('Joining room')
+    if (LOGS == True):
+        print('Joining room')
     user_list_box = window['-USER LIST-']
     roomId = message[2]
-    print(roomId)
     roomName = roomId_to_roomName[roomId]
-    print(roomName)
     my_rooms.append(roomName)
-    print(my_rooms)
     (room_user_list[roomName]).append(username)
     user_list_box.update(room_user_list[current_room])    
+    if (LOGS == True):
+        print("Joined")
 
 def r_room_left(window, message):
     user_list_box = window['-USER LIST-']
     roomId = message[2]
     roomName = roomId_to_roomName[roomId]
     my_rooms.remove(roomName)
-    roomName = roomId_to_roomName[roomId]
     room_user_list[roomName].remove(username)
     if roomName == current_room:
         user_list_box.update(room_user_list[current_room])    
     
 def r_list_of_rooms(window, message):
+    if (LOGS == True):
+        print("Updating room list")
     room_list_box = window['-ROOM LIST-']
     new_room_list = message[2]
-    new_rooms = new_room_list - room_list
-    room_list = room_list + new_rooms
+    for room in new_room_list:
+        roomId = room['roomId']
+        roomName = room['roomName']
+        if not (roomName in roomName_to_roomId or roomId in roomId_to_roomName):
+                roomId_to_roomName[roomId] = roomName
+                roomName_to_roomId[roomName] = roomId
+                room_list.append(roomName)
+                if not (roomName in room_user_list):
+                    room_user_list[roomName] = []                       
     room_list_box.update(room_list)
+    if (LOGS == True):
+        print("Updated room list")
 
 def r_room_destroyed(window, message):
     pass
@@ -348,6 +369,7 @@ NAME_SIZE=20
 MSG_BOX_SIZE = 10
 MESSAGE_TYPE = 1
 SERVER_MESSAGE_TYPE = 0
+LOGS = True
 
 broadcast_functions = {
         'ROOM_MESSAGE' : b_room_message,

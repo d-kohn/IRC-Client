@@ -24,14 +24,15 @@ class Request_Processor:
  
     requests = {
                'LOGIN' : ['request', 'username'],
-              'LOGOUT' : ['request', 'uuid'],
+              'LOGOUT' : ['request'],
                 'SEND' : ['request', 'roomId', 'data'],
          'CREATE_ROOM' : ['request', 'room_name'],
            'JOIN_ROOM' : ['request', 'roomId'],
           'LEAVE_ROOM' : ['request', 'roomId'],
         'DESTROY_ROOM' : ['request', 'roomId'],
-      'LIST_ALL_ROOMS' : ['request', 'uuid']
-     }
+      'LIST_ALL_ROOMS' : ['request'],
+   'LIST_ROOM_MEMBERS' : ['request', 'roomId']
+    }
 
     broadcasts = {
             'ROOM_MESSAGE' : ['broadcast', 'roomId', 'userId', 'msg'],
@@ -49,15 +50,10 @@ class Request_Processor:
            'ROOM_CREATED' : ['response', 'roomId', 'roomName'],
             'ROOM_JOINED' : ['response', 'roomId'],
               'ROOM_LEFT' : ['response', 'roomId'],
-          'LIST_OF_ROOMS' : ['response', 'roomId'],
+          'LIST_OF_ROOMS' : ['response', 'rooms'],
          'ROOM_DESTROYED' : ['response', 'roomId'],
                   'ERROR' : ['response', 'msg']
     }
-
-    # server_messages = {
-    #     0 : 'broadcast',
-    #     1 : 'response'
-    # }
 
     server_message_types = {
         'broadcast' : broadcasts,
@@ -71,7 +67,7 @@ class Request_Processor:
     # Takes a request type string, ie 'LOGIN', and a list of data for the request
     # Returns formated JSON request, eg { 'request' : '<request_type>', '<element>', <data>, '<element>', <data>, ...}
     def build_json_request(s, request_data):
-        print(f"Request Data: {request_data}")
+#        print(f"Request Data: {request_data}")
         try:
             request_format = s.requests[request_data[0]]
         except:
@@ -88,9 +84,9 @@ class Request_Processor:
                 print(f"{request_format}")
                 print(f"{request_data}")
                 return -2
-
+        request = json.dumps(request)
         print(f"Request JSON: {request}")
-        return json.dumps(request)
+        return request
     
     def process_response(s, incoming_json):
         print(f"Processing: {incoming_json}")
@@ -116,18 +112,5 @@ class Request_Processor:
                         message.insert(0, server_message_type)
                         break
                 break
-#                break    
-        # elif 'response' in incoming_message:
-        #     for response_type in s.responses:
-        #         if (incoming_message['response'] == response_type):
-        #             response = deepcopy(s.responses[response_type])
-        #             for i in range(len(response)):
-        #                 try: 
-        #                     field_key = response[i]
-        #                     response[i] = incoming_message[field_key]
-        #                 except:
-        #                     print("Improperly formatted server message")
-        #                     print(incoming_message)
-        #                 message = response
-        print(f"Message Data: {message}")
+#        print(f"Message Data: {message}")
         return message
