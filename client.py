@@ -175,6 +175,7 @@ async def main_window(client, jr):
                 message = jr.process_response(incoming_message)
                 if (message[MESSAGE_TYPE] == 'USER_LOGGED_IN'):
                     uuid = message[2]
+                    userId_to_username[uuid] = my_username
                     logged_in = True
 #                    break
                 else:
@@ -209,9 +210,10 @@ async def main_window(client, jr):
         if event == 'Send':
             text = values['-IN-']
             if (current_room != None):
-                message = jr.build_json_request(['SEND_ROOM_MSG', roomName_to_roomId[current_room], text])
-                await client.sendMessage(message)
-                window['-IN-'].update("")
+                if (current_room in my_rooms):
+                    message = jr.build_json_request(['SEND_ROOM_MSG', roomName_to_roomId[current_room], text])
+                    await client.sendMessage(message)
+                    window['-IN-'].update("")
             else:
                 update_message_box(window, message_box, "Join or create a room to send a message")                
 
@@ -249,8 +251,9 @@ async def main_window(client, jr):
 
         if event == 'Leave':
             if (current_room != None):
-                message = jr.build_json_request(['LEAVE_ROOM', roomName_to_roomId[current_room]])    
-                await client.sendMessage(message)
+                if (current_room in my_rooms):
+                    message = jr.build_json_request(['LEAVE_ROOM', roomName_to_roomId[current_room]])    
+                    await client.sendMessage(message)
             else:
                 update_message_box(window, message_box, "Select a room you are in from the Room List to leave")                
 
@@ -259,36 +262,32 @@ async def main_window(client, jr):
             message_data = jr.process_response(incoming_message)          
             server_message_type = server_message_types_list[message_data[SERVER_MESSAGE_TYPE]]
             message_type = message_data[MESSAGE_TYPE]
-            # if(message_type == 'ROOM_JOINED'):
-            #     (server_message_type[message_type])(window, message_data)
-            #     message = jr.build_json_request(['LIST_ROOM_MEMBERS', message_data[2]])        
-            #     await client.sendMessage(message)
-            #     print(message)
-            # else:
-            (server_message_type[message_type])(window, message_data)
-#            update_message_box(window, message_data, rcvd_message)
+            (server_message_type[message_type])(window, message_data, current_room)
 
     window.close()
     exit(1)
 
 # BROADCAST MESSAGE HANDLERS
-def b_room_message(window, message):
+def b_room_message(window, message, current_room):
     if (LOGS == True):
         print('Broadcast: Room message rcvd')
         print(message)
-    roomId = message['roomId']
+    roomId = message[2]
+    userId = message[3]
+    data = message[4]
+    username = userId_to_username[userId]
     roomName = roomId_to_roomName[roomId]
-    update_message_box(window, message['msg'], roomName, message['username'])
+    update_message_box(window, message_box, data, roomName, username)
     if (LOGS == True):
         print('Message posted')
 
-def b_user_joined_room(window, message):
+def b_user_joined_room(window, message, current_room):
     if (LOGS == True):
         print('Broadcast: User joined room')
         print(message)
-    roomId = message['roomId']
-    userId = message['userId']
-    username = 'temp'
+    roomId = message[2]
+    userId = message[3]
+    username = message[4]
     roomName = roomId_to_roomName[roomId]
     userId_to_username[userId] = username
     room_user_list[roomName].append(username)
@@ -298,23 +297,22 @@ def b_user_joined_room(window, message):
     if (LOGS == True):
         print('User added')
 
-def b_user_left_room(window, message):
+def b_user_left_room(window, message, current_room):
     if (LOGS == True):
         print('Broadcast: User left room')
         print(message)
-    roomId = message['roomId']
-    userId = message['userId']
+    roomId = message[2]
+    userId = message[3]
     roomName = roomId_to_roomName[roomId]
     username = userId_to_username[userId]
     room_user_list[roomName].remove(username)
-    if roomName == current_room:
+    if (roomName == current_room):
         user_list_box = window['-USER LIST-']
         user_list_box.update(room_user_list[current_room])    
     if (LOGS == True):
         print('User removed')
 
-
-def b_room_destroyed(window, message):
+def b_room_destroyed(window, message, current_room):
     if (LOGS == True):
         print('Broadcast: Destroying Room')
         print(message)
@@ -335,15 +333,16 @@ def b_room_destroyed(window, message):
     if (LOGS == True):
         print('Room destroyed')
 
-def b_user_logged_out(window, message):
+def b_user_logged_out(window, message, current_room):
     if (LOGS == True):
         print('Broadcast: User left room')
         print(message)
-    roomId = message['roomId']
-    userId = message['userId']
-    roomName = roomId_to_roomName[roomId]
-    username = userId_to_username[userId]
-    room_user_list[roomName].remove(username)
+    userId = message[2]
+    rooms = message[3]
+    for roomId in rooms:
+        roomName = roomId_to_roomName[roomId]
+        username = userId_to_username[userId]
+        room_user_list[roomName].remove(username)
     if roomName == current_room:
         user_list_box = window['-USER LIST-']
         user_list_box.update(room_user_list[current_room])    
@@ -351,16 +350,16 @@ def b_user_logged_out(window, message):
         print('User removed')
 
 # RESPONSE MESAGE HANDLERS
-def r_user_logged_in(window, message):
+def r_user_logged_in(window, message, current_room):
     pass
 
-def r_user_logged_out(window, message):
+def r_user_logged_out(window, message, current_room):
     update_message_box(window, "You have been logged out")
 
-def r_send_room_msg(window, message):
+def r_send_room_msg(window, message, current_room):
     update_message_box(window, window.values['-IN-'], current_room, my_username)
 
-def r_list_of_users(window, message):
+def r_list_of_users(window, message, current_room):
     if (LOGS == True):
         print('Updating room user list')
         print(message)
@@ -373,7 +372,7 @@ def r_list_of_users(window, message):
     if (LOGS == True):
         print("Updated user list")
 
-def r_room_created(window,  message):
+def r_room_created(window,  message, current_room):
     if (LOGS == True):
         print('Creating Room')
         print(message)
@@ -390,36 +389,42 @@ def r_room_created(window,  message):
         print("Room created")
 
 
-def r_room_joined(window, message):
+def r_room_joined(window, message, current_room):
     if (LOGS == True):
         print('Joining room')
         print(message)
     roomId = message[2]
-    user_list = message[3]
-    user_list.append(my_username)
     roomName = roomId_to_roomName[roomId]
+    user_list = message[3]
+
+    for user in user_list:
+        userId = user['userId']
+        username = user['username']
+        userId_to_username[userId] = username
+        (room_user_list[roomName]).append(username)
     my_rooms.append(roomName)
-    room_user_list[roomName] = user_list
+    current_room = roomName
     user_list_box = window['-USER LIST-']
     user_list_box.update(room_user_list[current_room])    
     if (LOGS == True):
         print("Joined")
 
-def r_room_left(window, message):
+def r_room_left(window, message, current_room):
     if (LOGS == True):
         print("Leaving Room")
         print(message)
     roomId = message[2]
     roomName = roomId_to_roomName[roomId]
     my_rooms.remove(roomName)
-    room_user_list[roomName].remove(my_username)
-    if roomName == current_room:
-        user_list_box = window['-USER LIST-']
-        user_list_box.update(room_user_list[current_room])    
+    room_user_list[roomName] = []
+#    if roomName == current_room:
+    current_room = None
+    user_list_box = window['-USER LIST-']
+    user_list_box.update(room_user_list[current_room])    
     if (LOGS == True):
         print("Room left")
 
-def r_list_of_rooms(window, message):
+def r_list_of_rooms(window, message, current_room):
     if (LOGS == True):
         print("Updating room list")
         print(message)
@@ -440,7 +445,7 @@ def r_list_of_rooms(window, message):
     if (LOGS == True):
         print("Updated room list")
 
-def r_room_destroyed(window, message):
+def r_room_destroyed(window, message, current_room):
     if (LOGS == True):
         print('Destroying Room')
         print(message)
@@ -460,7 +465,7 @@ def r_room_destroyed(window, message):
     if (LOGS == True):
         print('Room destroyed')
 
-def r_error(window, message):
+def r_error(window, message, current_room):
     msg = message[2]
     update_message_box(window, f'ERROR Received!!!! {msg}')
     
@@ -513,7 +518,7 @@ if __name__ == '__main__':
     room_user_list[None] = []
     room_list = []
     my_rooms = []
-    current_room = None
+#    current_room = None
     message_box = [""for i in range(MSG_BOX_SIZE)]
 
     # Creating client object

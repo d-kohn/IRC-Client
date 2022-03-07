@@ -2,26 +2,6 @@ from copy import deepcopy
 from http import server
 import json
 class Request_Processor:
-    # # Request formats
-    # login_format = ['request', 'username']
-    # logout_format = ['request', 'uuid']
-    # send_format = ['request', 'uuid', 'roomId', 'data']
-    # create_room_format = ['request', 'room_name']
-    # join_room_format = ['request', 'uuid', 'roomId']
-    # leave_room_format = ['request', 'uuid', 'roomId']
-    # destroy_room_format = ['request', 'roomId']
-    # list_all_rooms_format = ['request', 'uuid']
-
-    # # Broadcast formats
-    # room_message = ['broadcast', 'roomId', 'userId', 'msg']
-    # user_joined_room = ['broadcast', 'roomId', 'userId']
-    # user_left_room = ['broadcast', 'roomId', 'userId']
-    # room_destroyed = ['broadcast', 'roomId']
-    # user_logged_out = ['broadcast', 'userId', 'rooms']
-
-    # # Response formats
-    # user_logged_in = ['response', 'userId']
- 
     requests = {
                'LOGIN' : ['request', 'username'],
               'LOGOUT' : ['request'],
@@ -36,7 +16,7 @@ class Request_Processor:
 
     broadcasts = {
             'ROOM_MESSAGE' : ['broadcast', 'roomId', 'userId', 'msg'],
-        'USER_JOINED_ROOM' : ['broadcast', 'roomId', 'userId'],
+        'USER_JOINED_ROOM' : ['broadcast', 'roomId', 'userId', 'username'],
           'USER_LEFT_ROOM' : ['broadcast', 'roomId', 'userId'],
           'ROOM_DESTROYED' : ['broadcast', 'roomId'],
          'USER_LOGGED_OUT' : ['broadcast', 'userId', 'rooms']
@@ -59,7 +39,6 @@ class Request_Processor:
         'broadcast' : broadcasts,
         'response' : responses
     }
-
 
     def __init__(s):
         pass
@@ -85,7 +64,7 @@ class Request_Processor:
                 print(f"{request_data}")
                 return -2
         request = json.dumps(request)
-        print(f"Request JSON: {request}")
+#        print(f"Request JSON: {request}")
         return request
     
     def process_response(s, incoming_json):
