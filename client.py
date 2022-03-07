@@ -9,7 +9,7 @@ import asyncio
 import websockets
 import json
 
-from json_request import JSON_Request
+from request_processor import Request_Processor
 class WebSocketClient():
 
     def __init__(self):
@@ -25,7 +25,7 @@ class WebSocketClient():
             if self.connection.open:
                 print('Connection stablished. Client correcly connected')
                 # Send greeting
-                await self.sendMessage('Hey server, this is webSocket client')
+#                await self.sendMessage('Hey server, this is webSocket client')
                 return self.connection
         except:
             print("Connection failed")
@@ -93,6 +93,7 @@ def make_window(theme=None):
         [sg.Input(s=90, key='-IN-', do_not_clear=False)],
         [sg.Button('Send',bind_return_key=True, visible=True)],
     ]
+
     right_layout = [
         [sg.Text('ROOMS', font='Courier 10')],
         [sg.Text('Create new room:', font='Courier 10')],
@@ -130,10 +131,10 @@ def make_window(theme=None):
     window = sg.Window('IRC Chat', layout=final_layout, finalize=True, right_click_menu=sg.MENU_RIGHT_CLICK_EDITME_VER_EXIT, keep_on_top=True, return_keyboard_events=True)
     return window
 
-def scroll_messages(window, message_data):
+def scroll_messages(window, message_box):
     for i in range(MSG_BOX_SIZE-1):
-        message_data[i] = message_data[i+1]
-        window[f'-OUTPUT{i}-'].update(message_data[i])     
+        message_box[i] = message_box[i+1]
+        window[f'-OUTPUT{i}-'].update(message_box[i])     
  
 def login_window():
     layout1 = [
@@ -150,86 +151,229 @@ def login_window():
             break
         if event == 'Connect':
             server = "ws://localhost:8765" #values['-SERVER-']  
-            username = "blah" #values['-USER-']
+            username = values['-USER-']
             if (username != "" and server != ""):
                 login_window.close()
                 break
     return username, server
 
-def update_message_box(window, message_data, message):
-    scroll_messages(window, message_data)    
+def update_message_box(window, message_box, message, room = '', sender_username = ''):
+    scroll_messages(window, message_box)    
     current_time = time.strftime("%I:%M:%S")
-    message_data[MSG_BOX_SIZE-1] = f"{current_time} <{username}> {message}"
-    window[f'-OUTPUT{MSG_BOX_SIZE-1}-'].update(message_data[MSG_BOX_SIZE-1])     
+    message_box[MSG_BOX_SIZE-1] = f"{current_time} #{room} <{sender_username}> {message}"
+    window[f'-OUTPUT{MSG_BOX_SIZE-1}-'].update(message_box[MSG_BOX_SIZE-1])     
  
-async def main_window(client, jr): 
-    message_data = [""for i in range(MSG_BOX_SIZE)]
-    uuid = '1234-my-uuid-5678'
-    room_users = {}
-    room_users[''] = []
-    room_users['myroom'] = ['joe', 'larry']
-    room_users['anotherroom'] = ['joe', 'sue', 'tom']
-    room_users['destroyme'] = []
-    room_list = ['myroom', 'anotherroom', 'destroyme']
-
-
+async def main_window(client, jr):
+    current_room = None
+    logged_in = False
+    timeout = 0
+    while(logged_in == False and timeout < 50):
+        msg_queue_length = len(rcvd_pipe)
+        if (msg_queue_length > 0):
+            while (msg_queue_length > 0):
+                incoming_message = rcvd_pipe.pop(0)
+                message = jr.process_response(incoming_message)
+                if (message[MESSAGE_TYPE] == 'USER_LOGGED_IN'):
+                    uuid = message[2]
+                    logged_in = True
+                else:
+                    rcvd_pipe.append(incoming_message)
+                msg_queue_length -= 1
+        else:
+            await asyncio.sleep(0.1)
+            timeout += 1    
+    if(timeout == 50):
+        print("No LOGIN response from server")
+        exit(0)
+ 
     window = make_window()
-    current_room = ''
     room_list_box = window['-ROOM LIST-']
     user_list_box = window['-USER LIST-']
-    room_list_box.update(room_list)
-    user_list_box.update(room_users[current_room])
 
     while True:
         await asyncio.sleep(0.05)
         event, values = window.read(timeout=0)
+
         if event == sg.WIN_CLOSED or event == 'Exit':
             break
 
-        if event == 'Send':
-            text = values['-IN-']     
-            update_message_box(window, message_data, text)
-            message = jr.build_json_request(['SEND', uuid, room_list[0], values['-IN-']])    
-            await client.sendMessage(json.dumps(message))
-            window['-IN-'].update("")
-
         if event == '-ROOM LIST-':
-            current_room = values['-ROOM LIST-'][0]
-            room_list_box.update(room_list)    
-            user_list_box.update(room_users[current_room])
+             if (room_list != [None]):
+                current_room = values['-ROOM LIST-'][0]
+#                print(current_room)
+                room_list_box.update(room_list)
+                user_list_box.update(room_user_list[current_room])
+
+        if event == 'Send':
+            text = values['-IN-']
+#            print (current_room)      
+            if (current_room != None):
+                message = jr.build_json_request(['SEND', roomName_to_roomId[current_room], text])
+                await client.sendMessage(message)
+                window['-IN-'].update("")
+            else:
+                update_message_box(window, message_box, "Join or create a room to send a message")                
 
         if event == 'Update':
-            message = jr.build_json_request(['UPDATE', uuid])
-            await client.sendMessage(json.dumps(message))
+            if (current_room != None):
+                message = jr.build_json_request(['LIST_ALL_ROOMS', uuid])
+                await client.sendMessage(message)
+            else:
+                update_message_box(window, message_box, "You are not in a room")                
 
         if event == 'Create':
-            message = jr.build_json_request(['CREATE_ROOM', values['-CREATE-']])    
-            await client.sendMessage(json.dumps(message))
+            room_name = values['-CREATE-']
+            if (room_name != ''):
+                message = jr.build_json_request(['CREATE_ROOM', room_name])    
+                await client.sendMessage(message)
+                window['-CREATE-'].update("")
+            else:
+                update_message_box(window, message_box, "You are not in a room")                
  
         if event == 'Destroy':
-            message = jr.build_json_request(['DESTROY_ROOM', current_room])    
-            await client.sendMessage(json.dumps(message))
+            if (current_room != None):
+                message = jr.build_json_request(['DESTROY_ROOM', roomName_to_roomId[current_room]])    
+                await client.sendMessage(message)
+            else:
+                update_message_box(window, message_box, "You are not in a room")                
 
         if event == 'Join':
-            message = jr.build_json_request(['JOIN_ROOM', uuid, current_room])    
-            await client.sendMessage(json.dumps(message))
+            if (current_room != None):
+                message = jr.build_json_request(['JOIN_ROOM', roomName_to_roomId[current_room]])    
+                await client.sendMessage(message)
+            else:
+                update_message_box(window, message_box, "Select a room from the Room List to join")                
 
         if event == 'Leave':
-            message = jr.build_json_request(['LEAVE_ROOM', uuid, current_room])    
-            await client.sendMessage(json.dumps(message))
+            if (current_room != None):
+                message = jr.build_json_request(['LEAVE_ROOM', roomName_to_roomId[current_room]])    
+                await client.sendMessage(message)
+            else:
+                update_message_box(window, message_box, "Select a room you are in from the Room List to leave")                
 
-        while (len(rcvd_pipe) > 0):           
-            update_message_box(window, message_data, rcvd_pipe.pop())
+        while (len(rcvd_pipe) > 0):
+            incoming_message = rcvd_pipe.pop()
+            message_data = jr.process_response(incoming_message)          
+            server_message_type = server_message_types_list[message_data[SERVER_MESSAGE_TYPE]]
+            message_type = message_data[MESSAGE_TYPE]
+            (server_message_type[message_type])(window, message_data)
+#            update_message_box(window, message_data, rcvd_message)
 
     window.close()
     exit(1)
 
-async def rcv_messages(client, connnection):
-    while True:
-        rcvd_pipe.append(client.receiveMessage(connection))       
+# BROADCAST MESSAGE HANDLERS
+def b_room_message(window, message):
+    update_message_box(window, message['msg'], message['roomId'], message['userId'])
+
+
+def b_user_joined_room(window, message):
+    pass
+
+def b_user_left_room(window, message):
+    pass
+
+def b_room_destroyed(window, message):
+    pass
+
+def b_user_logged_out(window, message):
+    pass
+
+# RESPONSE MESAGE HANDLERS
+def r_user_logged_in(window, message):
+    pass
+
+def r_user_logged_out(window, message):
+    update_message_box(window, "You have been logged out")
+
+def r_send_room_msg(window, message):
+    update_message_box(window, window.values['-IN-'], current_room, username)
+
+def r_list_of_users(window, message):
+    user_list_box = window['-USER LIST-']
+    room_user_list[current_room] = message[2]
+    user_list_box.update(room_user_list[current_room])
+
+def r_room_created(window,  message):
+    room_list_box = window['-ROOM LIST-']
+    roomId = message[2]
+    roomName = message[3]
+    roomId_to_roomName[roomId] = roomName
+    roomName_to_roomId[roomName] = roomId
+    room_list.append(roomName)
+    room_list.sort()
+    room_list_box.update(room_list)
+    room_user_list[roomName] = []
+    print(room_user_list[roomName])
+
+def r_room_joined(window, message):
+    print('Joining room')
+    user_list_box = window['-USER LIST-']
+    roomId = message[2]
+    print(roomId)
+    roomName = roomId_to_roomName[roomId]
+    print(roomName)
+    my_rooms.append(roomName)
+    print(my_rooms)
+    (room_user_list[roomName]).append(username)
+    user_list_box.update(room_user_list[current_room])    
+
+def r_room_left(window, message):
+    user_list_box = window['-USER LIST-']
+    roomId = message[2]
+    roomName = roomId_to_roomName[roomId]
+    my_rooms.remove(roomName)
+    roomName = roomId_to_roomName[roomId]
+    room_user_list[roomName].remove(username)
+    if roomName == current_room:
+        user_list_box.update(room_user_list[current_room])    
+    
+def r_list_of_rooms(window, message):
+    room_list_box = window['-ROOM LIST-']
+    new_room_list = message[2]
+    new_rooms = new_room_list - room_list
+    room_list = room_list + new_rooms
+    room_list_box.update(room_list)
+
+def r_room_destroyed(window, message):
+    pass
+
+def r_error(window, message):
+    msg = message[2]
+    update_message_box(window, f'ERROR Received!!!! {msg}')
+    
+
 
 NAME_SIZE=20
 MSG_BOX_SIZE = 10
+MESSAGE_TYPE = 1
+SERVER_MESSAGE_TYPE = 0
+
+broadcast_functions = {
+        'ROOM_MESSAGE' : b_room_message,
+    'USER_JOINED_ROOM' : b_user_joined_room,
+      'USER_LEFT_ROOM' : b_user_left_room,
+      'ROOM_DESTROYED' : b_room_destroyed,
+     'USER_LOGGED_OUT' : b_user_logged_out
+}
+
+response_functions = {
+     'USER_LOGGED_IN' : r_user_logged_in,
+    'USER_LOGGED_OUT' : r_user_logged_out,
+      'SEND_ROOM_MSG' : r_send_room_msg,
+      'LIST_OF_USERS' : r_list_of_users,
+       'ROOM_CREATED' : r_room_created,
+        'ROOM_JOINED' : r_room_joined,
+          'ROOM_LEFT' : r_room_left,
+      'LIST_OF_ROOMS' : r_list_of_rooms,
+     'ROOM_DESTROYED' : r_room_destroyed,
+              'ERROR' : r_error
+}
+
+server_message_types_list = {
+    'broadcast' : broadcast_functions,
+    'response' : response_functions
+}
 
 if __name__ == '__main__':
     rcvd_pipe = []
@@ -238,9 +382,20 @@ if __name__ == '__main__':
     connection = NoneType
     username = ""
     server = ""
+    uuid = ""
+    userId_to_username = {}
+    roomName_to_roomId = {}
+    roomId_to_roomName = {}
+    room_user_list = {}
+    room_user_list[None] = []
+    room_list = []
+    my_rooms = []
+    current_room = None
+    message_box = [""for i in range(MSG_BOX_SIZE)]
+
     # Creating client object
     client = WebSocketClient()
-    jr = JSON_Request()
+    jr = Request_Processor()
     loop = asyncio.get_event_loop()
 
     while (connected == False):
@@ -251,8 +406,8 @@ if __name__ == '__main__':
             connected = True
             login_info = jr.build_json_request(['LOGIN', username])
             print(login_info)
-            loop.run_until_complete(client.sendMessage(json.dumps(login_info)))
-
+            loop.run_until_complete(client.sendMessage(login_info))
+  
     # Start listener and heartbeat 
     tasks = [
 #        asyncio.ensure_future(client.keepAlive(connection)),
