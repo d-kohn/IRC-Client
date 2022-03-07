@@ -25,7 +25,7 @@ class Request_Processor:
     requests = {
                'LOGIN' : ['request', 'username'],
               'LOGOUT' : ['request'],
-                'SEND' : ['request', 'roomId', 'data'],
+       'SEND_ROOM_MSG' : ['request', 'roomId', 'data'],
          'CREATE_ROOM' : ['request', 'room_name'],
            'JOIN_ROOM' : ['request', 'roomId'],
           'LEAVE_ROOM' : ['request', 'roomId'],
@@ -48,7 +48,7 @@ class Request_Processor:
           'SEND_ROOM_MSG' : ['response'],
           'LIST_OF_USERS' : ['response', 'users'],
            'ROOM_CREATED' : ['response', 'roomId', 'roomName'],
-            'ROOM_JOINED' : ['response', 'roomId'],
+            'ROOM_JOINED' : ['response', 'roomId', 'users'],
               'ROOM_LEFT' : ['response', 'roomId'],
           'LIST_OF_ROOMS' : ['response', 'rooms'],
          'ROOM_DESTROYED' : ['response', 'roomId'],
