@@ -457,7 +457,8 @@ def r_room_destroyed(window, message, current_room):
     room_list.remove(roomName)
     roomId_to_roomName.pop(roomId)
     roomName_to_roomId.pop(roomName)
-    current_room = None
+    if (current_room == roomName):
+        current_room = None
     room_list_box = window['-ROOM LIST-']
     room_list_box.update(room_list)
     user_list_box = window['-USER LIST-']
